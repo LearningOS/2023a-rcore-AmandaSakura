@@ -20,16 +20,17 @@ struct KernelStack {
 struct UserStack {
     data: [u8; USER_STACK_SIZE],
 }
-
+///内核栈
 static KERNEL_STACK: [KernelStack; MAX_APP_NUM] = [KernelStack {
     data: [0; KERNEL_STACK_SIZE],
 }; MAX_APP_NUM];
-
+///用户栈
 static USER_STACK: [UserStack; MAX_APP_NUM] = [UserStack {
     data: [0; USER_STACK_SIZE],
 }; MAX_APP_NUM];
 
 impl KernelStack {
+    //获取栈指针地址
     fn get_sp(&self) -> usize {
         self.data.as_ptr() as usize + KERNEL_STACK_SIZE
     }
@@ -49,11 +50,13 @@ impl UserStack {
 }
 
 /// Get base address of app i.
+///返回第i个应用程序的基地址
 fn get_base_i(app_id: usize) -> usize {
     APP_BASE_ADDRESS + app_id * APP_SIZE_LIMIT
 }
 
 /// Get the total number of applications.
+///返回应用程序的总数
 pub fn get_num_app() -> usize {
     extern "C" {
         fn _num_app();
@@ -63,6 +66,7 @@ pub fn get_num_app() -> usize {
 
 /// Load nth user app at
 /// [APP_BASE_ADDRESS + n * APP_SIZE_LIMIT, APP_BASE_ADDRESS + (n+1) * APP_SIZE_LIMIT).
+///把用户程序加载到内存中
 pub fn load_apps() {
     extern "C" {
         fn _num_app();
@@ -90,6 +94,7 @@ pub fn load_apps() {
 }
 
 /// get app info with entry and sp and save `TrapContext` in kernel stack
+///初始化应用程序上下文
 pub fn init_app_cx(app_id: usize) -> usize {
     KERNEL_STACK[app_id].push_context(TrapContext::app_init_context(
         get_base_i(app_id),

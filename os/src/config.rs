@@ -1,5 +1,5 @@
 //! Constants in the kernel
-
+///定义了操作系统中会经常用到的一些常量，之后如果需要的话也可以定义在这
 #[allow(unused)]
 
 /// user app's stack size

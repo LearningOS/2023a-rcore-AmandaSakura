@@ -20,8 +20,11 @@ use crate::sync::UPSafeCell;
 use lazy_static::*;
 use switch::__switch;
 pub use task::{TaskControlBlock, TaskStatus};
-
+use crate::syscall::process::TaskInfo;
 pub use context::TaskContext;
+use crate::task::task::TaskInfoInner;
+use crate::timer::get_time_ms;
+use crate::config::MAX_SYSCALL_NUM;
 
 /// The task manager, where all the tasks are managed.
 ///
@@ -44,6 +47,7 @@ pub struct TaskManagerInner {
     /// task list
     tasks: [TaskControlBlock; MAX_APP_NUM],
     /// id of current `Running` task
+    ///记录当前运行的程序的ID
     current_task: usize,
 }
 
@@ -54,6 +58,10 @@ lazy_static! {
         let mut tasks = [TaskControlBlock {
             task_cx: TaskContext::zero_init(),
             task_status: TaskStatus::UnInit,
+            task_info_inner: TaskInfoInner {
+                syscall_times: [0; MAX_SYSCALL_NUM], // 适当的字段初始化
+                start_time: 0, // 适当的字段初始化
+            },
         }; MAX_APP_NUM];
         for (i, task) in tasks.iter_mut().enumerate() {
             task.task_cx = TaskContext::goto_restore(init_app_cx(i));
@@ -76,6 +84,7 @@ impl TaskManager {
     ///
     /// Generally, the first task in task list is an idle task (we call it zero process later).
     /// But in ch3, we load apps statically, so the first task is a real app.
+    ///运行人物列表中的第一个任务
     fn run_first_task(&self) -> ! {
         let mut inner = self.inner.exclusive_access();
         let task0 = &mut inner.tasks[0];
@@ -91,6 +100,7 @@ impl TaskManager {
     }
 
     /// Change the status of current `Running` task into `Ready`.
+    ///把当前任务的状态改成ready
     fn mark_current_suspended(&self) {
         let mut inner = self.inner.exclusive_access();
         let current = inner.current_task;
@@ -107,6 +117,7 @@ impl TaskManager {
     /// Find next task to run and return task id.
     ///
     /// In this case, we only return the first `Ready` task in task list.
+    ///用于查找下一个要运行的任务并返回id
     fn find_next_task(&self) -> Option<usize> {
         let inner = self.inner.exclusive_access();
         let current = inner.current_task;
@@ -133,6 +144,26 @@ impl TaskManager {
             // go back to user mode
         } else {
             panic!("All applications completed!");
+        }
+    }
+
+    fn set_syscall_times(&self, syscall_id: usize) {
+        let mut inner = self.inner.exclusive_access();
+        let current_id = inner.current_task;
+        inner.tasks[current_id].task_info_inner.syscall_times[syscall_id] += 1;
+    }
+    ///?
+    pub fn get_current_task_info(&self, ti: *mut TaskInfo) {
+        let inner = self.inner.exclusive_access();
+        let current_id = inner.current_task;
+        let TaskInfoInner {syscall_times, start_time} = inner.tasks[current_id].task_info_inner;
+
+        unsafe {
+            *ti = TaskInfo {
+                status: TaskStatus::Running,
+                syscall_times,
+                time: get_time_ms() - start_time,
+            };
         }
     }
 }
@@ -168,4 +199,12 @@ pub fn suspend_current_and_run_next() {
 pub fn exit_current_and_run_next() {
     mark_current_exited();
     run_next_task();
+}
+///还想让我加注释是吧
+pub fn record_syscall(syscall_id: usize) {
+    TASK_MANAGER.set_syscall_times(syscall_id);
+}
+///hhhhhhhh
+pub fn get_task_info(ti: *mut TaskInfo) {
+    TASK_MANAGER.get_current_task_info(ti);
 }
